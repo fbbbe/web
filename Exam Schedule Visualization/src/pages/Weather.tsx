@@ -20,7 +20,7 @@ interface ExamDateInfo {
   cert: Certification;
   round: string;
   date: Date;
-  dateStr: string;
+  dateKey: string;
   type: 'written' | 'practical';
   region: string;
 }
@@ -30,6 +30,19 @@ export function Weather({ certifications }: WeatherProps) {
   const [weatherByRegion, setWeatherByRegion] = useState<Record<string, MidWeatherResponse | null>>({});
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [locationRegion, setLocationRegion] = useState<string | null>(null);
+  const selectItemClass =
+    "data-[state=checked]:bg-primary/10 data-[state=checked]:text-primary [&_[data-radix-select-item-indicator]]:hidden";
+
+  const toDateKey = (value: Date | string | undefined): string | undefined => {
+    if (!value) return undefined;
+    const d = typeof value === 'string' ? new Date(value) : new Date(value);
+    if (Number.isNaN(d.getTime())) return undefined;
+    d.setHours(0, 0, 0, 0);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
 
   const allLocations = certifications.flatMap(cert =>
     cert.exams.flatMap(exam => exam.locations)
@@ -43,22 +56,24 @@ export function Weather({ certifications }: WeatherProps) {
       const dates: ExamDateInfo[] = [];
       
       if (exam.writtenExam && exam.writtenExam !== '상시') {
+        const dateKey = toDateKey(exam.writtenExam);
         dates.push({
           cert,
           round: exam.round,
           date: new Date(exam.writtenExam),
-          dateStr: exam.writtenExam,
+          dateKey: dateKey || exam.writtenExam,
           type: 'written',
           region,
         });
       }
       
       if (exam.practicalExam && exam.practicalExam !== '상시') {
+        const dateKey = toDateKey(exam.practicalExam);
         dates.push({
           cert,
           round: exam.round,
           date: new Date(exam.practicalExam),
-          dateStr: exam.practicalExam,
+          dateKey: dateKey || exam.practicalExam,
           type: 'practical',
           region,
         });
@@ -86,9 +101,9 @@ export function Weather({ certifications }: WeatherProps) {
     });
   }, [activeRegion, examDates, weatherByRegion]);
 
-  const selectedDateStr = selectedDate?.toISOString().split('T')[0];
+  const selectedDateKey = toDateKey(selectedDate);
   const examsOnSelectedDate = examDates.filter(
-    exam => exam.dateStr === selectedDateStr
+    exam => exam.dateKey === selectedDateKey
   );
   const selectedRegionForDate = locationRegion || examsOnSelectedDate[0]?.region || defaultRegion;
   const selectedDateForecast = selectedDate
@@ -104,7 +119,7 @@ export function Weather({ certifications }: WeatherProps) {
   const upcomingExams = examDates
     .map(exam => ({
       ...exam,
-      daysUntil: getDaysUntil(exam.dateStr),
+      daysUntil: getDaysUntil(exam.dateKey),
     }))
     .filter(exam => Number.isFinite(exam.daysUntil) && exam.daysUntil >= 0)
     .sort((a, b) => a.date.getTime() - b.date.getTime())
@@ -157,17 +172,17 @@ export function Weather({ certifications }: WeatherProps) {
                   <SelectTrigger className="mt-2 bg-white text-gray-900 border border-white/60 shadow-md">
                     <SelectValue placeholder="지역을 선택하세요" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="수도권">수도권</SelectItem>
-                    <SelectItem value="강원영서">강원영서</SelectItem>
-                    <SelectItem value="강원영동">강원영동</SelectItem>
-                    <SelectItem value="충청북도">충청북도</SelectItem>
-                    <SelectItem value="충남권">충남권</SelectItem>
-                    <SelectItem value="전라북도">전라북도</SelectItem>
-                    <SelectItem value="전남권">전남권</SelectItem>
-                    <SelectItem value="경북권">경북권</SelectItem>
-                    <SelectItem value="경남권">경남권</SelectItem>
-                    <SelectItem value="제주도">제주도</SelectItem>
+                  <SelectContent className="bg-white text-gray-900 shadow-lg border border-gray-200 no-check">
+                    <SelectItem value="수도권" className={selectItemClass}>수도권</SelectItem>
+                    <SelectItem value="강원영서" className={selectItemClass}>강원영서</SelectItem>
+                    <SelectItem value="강원영동" className={selectItemClass}>강원영동</SelectItem>
+                    <SelectItem value="충청북도" className={selectItemClass}>충청북도</SelectItem>
+                    <SelectItem value="충남권" className={selectItemClass}>충남권</SelectItem>
+                    <SelectItem value="전라북도" className={selectItemClass}>전라북도</SelectItem>
+                    <SelectItem value="전남권" className={selectItemClass}>전남권</SelectItem>
+                    <SelectItem value="경북권" className={selectItemClass}>경북권</SelectItem>
+                    <SelectItem value="경남권" className={selectItemClass}>경남권</SelectItem>
+                    <SelectItem value="제주도" className={selectItemClass}>제주도</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-white/70 mt-1">
@@ -244,7 +259,7 @@ export function Weather({ certifications }: WeatherProps) {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <Cloud className="w-5 h-5 text-primary" />
-                      {formatDate(selectedDateStr || '')} 날씨
+                      {formatDate(selectedDateKey || '')} 날씨
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -321,7 +336,7 @@ export function Weather({ certifications }: WeatherProps) {
                   <div className="p-4 border-2 rounded-card bg-gradient-to-r from-blue-50 to-cyan-50">
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="text-sm text-gray-600 mb-1">{formatDate(selectedDateStr || '')}</div>
+                        <div className="text-sm text-gray-600 mb-1">{formatDate(selectedDateKey || '')}</div>
                         <div className="flex items-center gap-3 text-lg">
                           <span className="text-3xl">{getWeatherEmoji(selectedWeatherDisplay?.condition || '맑음')}</span>
                           <span className="text-gray-800">{selectedWeatherDisplay?.condition || '예보 준비중'}</span>

@@ -113,27 +113,23 @@ export function Search({ certifications }: SearchProps) {
 
               <div className="space-y-3">
                 {results.map((item) => {
-                  const certId = matchedCertIds.get(item.label);
+                  const certId = matchedCertIds.get(item.label) || encodeURIComponent(item.label);
                   return (
                     <div
                       key={item.uri}
                       className="border-2 border-gray-100 rounded-xl p-4 hover:border-primary transition-colors"
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <div className="text-gray-900 font-medium mb-1">{item.label}</div>
-                          <div className="text-sm text-gray-600">{item.desc || '설명 없음'}</div>
-                          <div className="text-xs text-gray-400 mt-2 break-all">{item.uri}</div>
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-gray-900 font-medium mb-1">{item.label}</div>
+                            <div className="text-sm text-gray-600">{item.desc || '설명 없음'}</div>
+                            <div className="text-xs text-gray-400 mt-2 break-all">{item.uri}</div>
+                          </div>
+                        <Link to={`/cert/${certId}`} className="flex items-center gap-1 text-primary hover:underline">
+                          상세 보기
+                          <ArrowRight className="w-4 h-4" />
+                        </Link>
                         </div>
-                        {certId ? (
-                          <Link to={`/cert/${certId}`} className="flex items-center gap-1 text-primary hover:underline">
-                            상세 보기
-                            <ArrowRight className="w-4 h-4" />
-                          </Link>
-                        ) : (
-                          <span className="text-xs text-gray-500">상세 데이터 준비 중</span>
-                        )}
-                      </div>
                     </div>
                   );
                 })}

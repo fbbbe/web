@@ -118,24 +118,13 @@ async function collectLicenses(limit = 15) {
 }
 
 async function fetchSchedulesForLicense(name: string): Promise<any[]> {
-  const now = new Date();
-  const years = [now.getFullYear(), now.getFullYear() + 1];
-  const schedules: any[] = [];
-
-  for (const year of years) {
-    try {
-      const data = await fetchJson<LicenseScheduleResponse>(
-        `/licenses/schedule?name=${encodeURIComponent(name)}&year=${year}`,
-      );
-      if (Array.isArray(data.results)) {
-        schedules.push(...data.results);
-      }
-    } catch (error) {
-      console.warn(`Failed to load schedule for ${name} (${year})`, error);
-    }
+  try {
+    const data = await fetchJson<LicenseScheduleResponse>(`/licenses/schedule?name=${encodeURIComponent(name)}`);
+    return Array.isArray(data.results) ? data.results : [];
+  } catch (error) {
+    console.warn(`Failed to load schedule for ${name}`, error);
+    return [];
   }
-
-  return schedules;
 }
 
 async function fetchLicenseFee(name: string): Promise<any[]> {
@@ -215,22 +204,23 @@ function mapScheduleToExamRound(
   locations: ExamLocation[],
 ): ExamRound {
   const roundLabel =
+    item?.round ||
     item?.description ||
     (item?.year && item?.seq ? `${item.year}년 ${item.seq}회` : `${item?.implYy ?? ''} ${item?.implSeq ?? ''}`.trim()) ||
     '시험 일정';
-  const writtenExam = normalizeDateString(item?.docExamStartDt || item?.docExamEndDt);
+  const writtenExam = normalizeDateString(item?.docExamStartDt || item?.examDate || item?.docExamEndDt);
   const practicalExam = normalizeDateString(item?.pracExamStartDt || item?.pracExamEndDt);
 
   return {
     round: roundLabel,
-    registrationStart: normalizeDateString(item?.docRegStartDt),
-    registrationEnd: normalizeDateString(item?.docRegEndDt),
+    registrationStart: normalizeDateString(item?.docRegStartDt || item?.appDate),
+    registrationEnd: normalizeDateString(item?.docRegEndDt || item?.appDate),
     writtenExam,
     practicalRegistrationStart: normalizeDateString(item?.pracRegStartDt) || undefined,
     practicalRegistrationEnd: normalizeDateString(item?.pracRegEndDt) || undefined,
     practicalExam: practicalExam || undefined,
     resultDate: normalizeDateString(item?.pracPassDt || item?.docPassDt),
-    writtenFee: feeInfo.written ?? 0,
+    writtenFee: feeInfo.written ?? toNumber(item?.writtenFee ?? item?.fee) ?? 0,
     practicalFee: feeInfo.practical,
     locations,
   };
@@ -263,7 +253,7 @@ export async function fetchInitialCertifications(): Promise<Certification[]> {
     exams.sort((a, b) => sortKey(a) - sortKey(b));
 
     certifications.push({
-      id: encodeURIComponent(license.uri || license.label),
+      id: encodeURIComponent(license.label),
       name: license.label,
       category: schedules[0]?.qualgbNm || '자격증',
       difficulty: '정보없음',
@@ -414,4 +404,37 @@ export async function searchLicenses(keyword: string): Promise<LicenseSearchResu
     console.warn('Failed to search licenses', error);
     return [];
   }
+}
+
+export async function fetchCertificationByName(name: string): Promise<Certification | null> {
+  const schedules = await fetchSchedulesForLicense(name);
+  if (!schedules.length) return null;
+
+  const feeItems = await fetchLicenseFee(name);
+  const feeInfo = extractFeeInfo(feeItems);
+  const locations = await fetchLicenseSites(name);
+
+  const exams = schedules
+    .map((item) => mapScheduleToExamRound(item, feeInfo, locations))
+    .filter((exam) => exam.registrationStart || exam.writtenExam);
+
+  if (!exams.length) return null;
+
+  const sortKey = (exam: ExamRound) => {
+    const base = exam.writtenExam || exam.registrationStart;
+    const parsed = Date.parse(base);
+    return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed;
+  };
+
+  exams.sort((a, b) => sortKey(a) - sortKey(b));
+
+  return {
+    id: encodeURIComponent(name),
+    name,
+    category: schedules[0]?.qualgbNm || '자격증',
+    difficulty: '정보없음',
+    description: schedules[0]?.description || '',
+    agency: schedules[0]?.qualgbNm || '국가자격',
+    exams,
+  };
 }

@@ -463,6 +463,11 @@
   }
 }
 
+/* Hide radix select check icon for custom dropdowns */
+.no-check [data-radix-select-item-indicator] {
+  display: none !important;
+}
+
 @layer utilities {
   .\@container\/card-header {
     container: card-header / inline-size;
