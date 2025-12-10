@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, useScroll, useTransform } from 'motion/react';
-import { Search, Calendar, MapPin, Award, ArrowRight, TrendingUp } from 'lucide-react';
+import { Search, Calendar, MapPin, Award, ArrowRight } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
@@ -26,25 +26,40 @@ export function Home({ certifications }: HomeProps) {
     cert.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Get upcoming exams with D-day
-  const upcomingExams = certifications
-    .flatMap(cert => 
-      cert.exams.map(exam => ({
-        cert,
-        exam,
-        date: new Date(exam.writtenExam),
-        daysUntil: getDaysUntil(exam.writtenExam)
-      }))
+  const parseDate = (value: string) => {
+    if (!value || value === '상시') return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const examEntries = certifications.flatMap((cert) =>
+    cert.exams.map((exam) => {
+      const registrationStart = parseDate(exam.registrationStart);
+      const registrationEnd = parseDate(exam.registrationEnd);
+      const writtenDate = parseDate(exam.writtenExam);
+      const daysUntil = getDaysUntil(exam.writtenExam);
+      return { cert, exam, registrationStart, registrationEnd, writtenDate, daysUntil };
+    })
+  );
+
+  const ongoingRegistrations = examEntries
+    .filter(
+      (item) =>
+        item.registrationStart &&
+        item.registrationEnd &&
+        item.registrationStart.getTime() <= today.getTime() &&
+        item.registrationEnd.getTime() >= today.getTime()
     )
-    .filter(item => item.daysUntil >= 0)
-    .sort((a, b) => a.daysUntil - b.daysUntil)
+    .sort((a, b) => (a.registrationEnd?.getTime() ?? 0) - (b.registrationEnd?.getTime() ?? 0))
     .slice(0, 6);
 
-  // Popular certifications (those with nearest exams)
-  const popularCerts = upcomingExams.slice(0, 6);
-
-  // Recent exam schedule
-  const recentSchedule = upcomingExams.slice(0, 5);
+  const upcomingExams = examEntries
+    .filter((item) => item.writtenDate && item.daysUntil >= 0 && item.daysUntil <= 14)
+    .sort((a, b) => (a.writtenDate?.getTime() ?? 0) - (b.writtenDate?.getTime() ?? 0))
+    .slice(0, 6);
 
   const getCategoryEmoji = (category: string) => {
     if (category.includes('IT') || category.includes('컴퓨터')) return '💻';
@@ -169,61 +184,6 @@ export function Home({ certifications }: HomeProps) {
         </div>
       </motion.section>
 
-      {/* Popular Certifications */}
-      <section className="py-12 px-4 bg-white">
-        <div className="max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="mb-8"
-          >
-            <h2 className="text-gray-900 mb-2">📌 인기 자격증</h2>
-            <p className="text-gray-600">곧 시험이 예정된 자격증을 확인하세요</p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {popularCerts.map((item, index) => (
-              <motion.div
-                key={`${item.cert.id}-${index}`}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <Link to={`/cert/${item.cert.id}`}>
-                  <Card className="h-full hover:shadow-card-hover transition-all duration-300 hover:-translate-y-1 cursor-pointer rounded-card-lg border-2 border-transparent hover:border-primary">
-                    <CardContent className="p-6">
-                      <div className="flex items-start justify-between mb-4">
-                        <span className="text-4xl">{getCategoryEmoji(item.cert.category)}</span>
-                        <Badge 
-                          className={`
-                            text-lg px-3 py-1
-                            ${item.daysUntil <= 7 ? 'bg-danger text-white' : 
-                              item.daysUntil <= 30 ? 'bg-warning text-gray-900' : 
-                              'bg-success text-white'}
-                          `}
-                        >
-                          {formatDDay(item.daysUntil)}
-                        </Badge>
-                      </div>
-                      <h3 className="text-gray-900 mb-2">{item.cert.name}</h3>
-                      <div className="text-sm text-gray-600 mb-3">
-                        {item.exam.round}
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Calendar className="w-4 h-4" />
-                        <span>{formatDate(item.exam.writtenExam, 'short')}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Recent Schedule */}
       <section className="py-12 px-4">
         <div className="max-w-6xl mx-auto">
@@ -234,73 +194,143 @@ export function Home({ certifications }: HomeProps) {
             className="mb-8"
           >
             <h2 className="text-gray-900 mb-2">📅 최근 시험 일정</h2>
-            <p className="text-gray-600">다가오는 시험 접수 및 시험일</p>
+            <p className="text-gray-600">현재 접수 중/2주 이내 시험을 구분해서 보여줍니다</p>
           </motion.div>
 
-          <div className="space-y-4">
-            {recentSchedule.map((item, index) => (
-              <motion.div
-                key={`${item.cert.id}-schedule-${index}`}
-                initial={{ opacity: 0, x: -20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <Link to={`/cert/${item.cert.id}`}>
-                  <Card className="hover:shadow-card-hover transition-all duration-300 cursor-pointer border-2 border-transparent hover:border-primary rounded-card-lg">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-3">
-                            <span className="text-2xl">{getCategoryEmoji(item.cert.category)}</span>
-                            <div>
-                              <h3 className="text-gray-900">{item.cert.name}</h3>
-                              <div className="text-sm text-gray-500">{item.exam.round}</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <span className="text-xl">📝</span> 현재 접수 중
+              </h3>
+              {ongoingRegistrations.length === 0 && (
+                <div className="text-gray-500 text-sm bg-white p-6 rounded-card-lg border border-gray-100">
+                  현재 접수 중인 시험이 없습니다.
+                </div>
+              )}
+              {ongoingRegistrations.map((item, index) => (
+                <motion.div
+                  key={`${item.cert.id}-apply-${index}`}
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <Link to={`/cert/${item.cert.id}`}>
+                    <Card className="hover:shadow-card-hover transition-all duration-300 cursor-pointer border-2 border-transparent hover:border-primary rounded-card-lg">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-3">
+                              <span className="text-2xl">{getCategoryEmoji(item.cert.category)}</span>
+                              <div>
+                                <h3 className="text-gray-900">{item.cert.name}</h3>
+                                <div className="text-sm text-gray-500">{item.exam.round}</div>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                              <div className="flex items-center gap-2 text-gray-600">
+                                <span className="text-primary">📝</span>
+                                <div>
+                                  <div className="text-xs text-gray-500">접수 기간</div>
+                                  <div>{formatDate(item.exam.registrationStart, 'short')} ~ {formatDate(item.exam.registrationEnd, 'short')}</div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 text-gray-600">
+                                <Calendar className="w-4 h-4 text-primary" />
+                                <div>
+                                  <div className="text-xs text-gray-500">필기 시험일</div>
+                                  <div>{formatDate(item.exam.writtenExam, 'short')}</div>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                            <div className="flex items-center gap-2 text-gray-600">
-                              <Calendar className="w-4 h-4 text-primary" />
+                          <div className="flex items-center gap-4">
+                            <Badge 
+                              className={`
+                                text-xl px-4 py-2
+                                ${item.daysUntil <= 7 ? 'bg-danger text-white' : 
+                                  item.daysUntil <= 14 ? 'bg-warning text-gray-900' : 
+                                  'bg-success text-white'}
+                              `}
+                            >
+                              {formatDDay(item.daysUntil)}
+                            </Badge>
+                            <ArrowRight className="w-6 h-6 text-gray-400" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <span className="text-xl">⏳</span> 다가오는 시험 (2주 이내)
+              </h3>
+              {upcomingExams.length === 0 && (
+                <div className="text-gray-500 text-sm bg-white p-6 rounded-card-lg border border-gray-100">
+                  2주 이내에 예정된 시험이 없습니다.
+                </div>
+              )}
+              {upcomingExams.map((item, index) => (
+                <motion.div
+                  key={`${item.cert.id}-upcoming-${index}`}
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <Link to={`/cert/${item.cert.id}`}>
+                    <Card className="hover:shadow-card-hover transition-all duration-300 cursor-pointer border-2 border-transparent hover:border-primary rounded-card-lg">
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-3">
+                              <span className="text-2xl">{getCategoryEmoji(item.cert.category)}</span>
                               <div>
-                                <div className="text-xs text-gray-500">필기 시험일</div>
-                                <div>{formatDate(item.exam.writtenExam, 'short')}</div>
+                                <h3 className="text-gray-900">{item.cert.name}</h3>
+                                <div className="text-sm text-gray-500">{item.exam.round}</div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 text-gray-600">
-                              <span className="text-primary">📝</span>
-                              <div>
-                                <div className="text-xs text-gray-500">접수 기간</div>
-                                <div>{formatDate(item.exam.registrationStart, 'short')} ~ {formatDate(item.exam.registrationEnd, 'short')}</div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                              <div className="flex items-center gap-2 text-gray-600">
+                                <Calendar className="w-4 h-4 text-primary" />
+                                <div>
+                                  <div className="text-xs text-gray-500">필기 시험일</div>
+                                  <div>{formatDate(item.exam.writtenExam, 'short')}</div>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-gray-600">
-                              <MapPin className="w-4 h-4 text-success" />
-                              <div>
-                                <div className="text-xs text-gray-500">시험장</div>
-                                <div>{item.exam.locations.length}개 지역</div>
+                              <div className="flex items-center gap-2 text-gray-600">
+                                <span className="text-primary">📝</span>
+                                <div>
+                                  <div className="text-xs text-gray-500">접수 기간</div>
+                                  <div>{formatDate(item.exam.registrationStart, 'short')} ~ {formatDate(item.exam.registrationEnd, 'short')}</div>
+                                </div>
                               </div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-4">
+                            <Badge 
+                              className={`
+                                text-xl px-4 py-2
+                                ${item.daysUntil <= 3 ? 'bg-danger text-white' : 
+                                  item.daysUntil <= 7 ? 'bg-warning text-gray-900' : 
+                                  'bg-success text-white'}
+                              `}
+                            >
+                              {formatDDay(item.daysUntil)}
+                            </Badge>
+                            <ArrowRight className="w-6 h-6 text-gray-400" />
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <Badge 
-                            className={`
-                              text-xl px-4 py-2
-                              ${item.daysUntil <= 7 ? 'bg-danger text-white' : 
-                                item.daysUntil <= 30 ? 'bg-warning text-gray-900' : 
-                                'bg-success text-white'}
-                            `}
-                          >
-                            {formatDDay(item.daysUntil)}
-                          </Badge>
-                          <ArrowRight className="w-6 h-6 text-gray-400" />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              </motion.div>
-            ))}
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

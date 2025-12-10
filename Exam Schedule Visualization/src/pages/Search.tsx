@@ -43,6 +43,16 @@ export function Search({ certifications }: SearchProps) {
     return map;
   }, [certifications]);
 
+  const dedupedResults = useMemo(() => {
+    const seen = new Set<string>();
+    return results.filter((item) => {
+      const key = item.label.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [results]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setParams(query ? { q: query } : {});
@@ -91,7 +101,7 @@ export function Search({ certifications }: SearchProps) {
               <CardTitle className="flex items-center gap-2">
                 <Award className="w-5 h-5 text-primary" />
                 검색 결과
-                {query && <Badge variant="outline">{results.length}건</Badge>}
+                {query && <Badge variant="outline">{dedupedResults.length}건</Badge>}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -105,14 +115,14 @@ export function Search({ certifications }: SearchProps) {
                 <div className="text-center text-gray-500 py-10">검색 중...</div>
               )}
 
-              {query && !loading && results.length === 0 && (
+              {query && !loading && dedupedResults.length === 0 && (
                 <div className="text-center text-gray-500 py-10">
                   검색 결과가 없습니다.
                 </div>
               )}
 
               <div className="space-y-3">
-                {results.map((item) => {
+                {dedupedResults.map((item) => {
                   const certId = matchedCertIds.get(item.label) || encodeURIComponent(item.label);
                   return (
                     <div
@@ -123,7 +133,6 @@ export function Search({ certifications }: SearchProps) {
                           <div>
                             <div className="text-gray-900 font-medium mb-1">{item.label}</div>
                             <div className="text-sm text-gray-600">{item.desc || '설명 없음'}</div>
-                            <div className="text-xs text-gray-400 mt-2 break-all">{item.uri}</div>
                           </div>
                         <Link to={`/cert/${certId}`} className="flex items-center gap-1 text-primary hover:underline">
                           상세 보기
